@@ -41,3 +41,4 @@ result = template.result(binding)
 File.write(output_path, result)
 
 puts "#{current} -> #{version}"
+
