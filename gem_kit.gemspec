@@ -5,16 +5,16 @@ require_relative "lib/gem_kit/version"
 Gem::Specification.new do |spec|
   spec.name = "gem_kit"
   spec.version = GemKit::VERSION
-  spec.authors = ["Your Name"]
-  spec.email = ["you@example.com"]
+  spec.authors = ["Nathan K"]
+  spec.email = ["nathankidd@hey.com"]
 
-  spec.summary = "TODO: Write a short summary"
+  spec.summary = "Dynamic gem template"
 
   spec.description = <<~DESC
-    TODO: Write a description.
+    Clone the repo and run bin/rename-gem and you have a gem.
   DESC
 
-  spec.homepage = "https://github.com/you/gem-kit"
+  spec.homepage = "https://github.com/n-at-han-k/gem-kit"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2.0"
 
