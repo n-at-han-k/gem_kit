@@ -1,5 +1,7 @@
 # gem_kit
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/n-at-han-k/gem_kit)
+
 A template for creating Ruby gems.
 
 ## Usage
