@@ -88,7 +88,7 @@ gem kit deprecations
 ```
 
 ```
-1 outstanding deprecation(s) (current version 0.1.0):
+1 outstanding deprecation(s) (current version 0.2.0):
   1.0      Session#old_reset -> Session#new_reset
            lib/session.rb:19
 ```
@@ -117,7 +117,7 @@ code is actually gone:
 
 ```
 $ gem kit bump major
-ERROR:  Refusing to bump 0.1.0 -> 1.0.0:
+ERROR:  Refusing to bump 0.2.0 -> 1.0.0:
 
   1.0      Session#old_reset -> Session#new_reset
            lib/session.rb:19

@@ -9,35 +9,70 @@ files.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-20
+
+### Changed
+
+- **The command line is [Thor](https://github.com/rails/thor), not dry-cli.**
+  `gem kit` still lists the commands; per-command help is now
+  `gem kit help <command>` rather than `gem kit <command> --help`. The change
+  was for `Thor::Group` and `Thor::Actions` — see `gem kit setup` below.
+- `gem kit setup` is a generator rather than a pair of `File.write` calls. It
+  reports `create` / `identical` / `conflict` per file, prompts before
+  overwriting something that differs, and takes `--force`, `--skip`,
+  `--pretend` and `--quiet` — all of it from Thor rather than hand-rolled.
+- In a repository holding more than one gemspec, every command now takes
+  `--gem` and refuses to guess without it. The changelog, the release document
+  and the tag are per-gem there — `CHANGELOG-<gem>.md`, `RELEASE-<gem>.md` and
+  `<gem>-v<version>` — against plain `CHANGELOG.md`, `RELEASE.md` and
+  `v<version>` in a repository with one. The changelog has to be per-gem or the
+  release gate, which asks whether the version being cut is the topmost
+  released section, can only ever pass for one of them. `DEPRECATIONS.md` stays
+  one per repository, because one policy governs all of it.
+
+### Added
+
+- `GemKit::Release.plugin`, the extension seam. Another gem adds commands to
+  `gem kit` by reopening the Thor class through it; a command added that way is
+  listed, takes `--gem`, and gets a help page like any other. See
+  [gem_kit-plugin](https://github.com/n-at-han-k/gem_kit-plugin).
+- `gem kit tag` takes `--prefix`, defaulting to the per-repository convention
+  above.
+
+### Removed
+
+- **`GemKit::Release::Deprecate` — it is `GemKit::Deprecate`, in the `gem_kit`
+  gem.** A deprecation is declared at runtime and enforced at release time, so
+  keeping both halves in one gem meant a library that deprecates a name
+  acquired a release toolchain to do it. `gem_kit` is now a dependency of this
+  gem, so `GemKit::Deprecate` is present either way; the constant simply moved.
+
+  Removed outright rather than deprecated, which is not what this gem tells you
+  to do. 0.1.0 was published for a few hours and downloaded zero times, and a
+  shim for a name nobody has is ceremony rather than care.
+
+### Fixed
+
+- `Project#next_major_version` returned `"5"` for a 4.x gem, which read badly
+  everywhere it surfaced — `deprecate :old, "New", "5"`, "removed in 5". It is
+  `"5.0"` now. `Gem::Version` treats the two as equal, so deadlines already
+  declared either way still compare the same.
+
 ## [0.1.0] - 2026-08-20
 
 ### Added
 
 - `gem kit` — one RubyGems command, with subcommands `setup`, `bump`,
-  `changelog`, `deprecations`, `release` and `tag`. Installing the gem is the
-  whole installation; there is no Rakefile to edit and no binstub to add.
+  `changelog`, `deprecations`, `release` and `tag`, on dry-cli. Installing the
+  gem is the whole installation; there is no Rakefile to edit and no binstub to
+  add.
 - `gem kit bump` refuses to move onto a deprecation's removal version while the
   old name is still in the tree, and `gem kit release` refuses to ship a
   version with an unkept promise or no changelog entry of its own.
 - `GemKit::Release::Project` reads the gem's identity out of its `.gemspec`, so
-  the normal case needs no configuration. In a repository holding several
-  gemspecs it refuses to guess, and every command takes `--gem`.
-- One changelog, one release document and one tag namespace per gem when a
-  repository holds more than one gemspec: `CHANGELOG-<gem>.md`,
-  `RELEASE-<gem>.md` and `<gem>-v<version>`, against plain `CHANGELOG.md`,
-  `RELEASE.md` and `v<version>` when it holds one. The changelog has to be
-  per-gem or the release gate — which asks whether the version being cut is the
-  topmost released section — can only ever pass for one of them.
-  `DEPRECATIONS.md` stays one per repository, because one policy governs all of
-  it.
-- `gem kit setup` writes DEPRECATIONS.md and RELEASE.md into the project,
-  rendered for its name and versions. It is a `Thor::Group` generator — the
-  machinery behind `rails generate` — so it reports `create` / `identical` /
-  `conflict` per file and takes `--force`, `--skip` and `--pretend`.
-- `GemKit::Release.plugin`, the extension seam. Another gem adds commands to
-  `gem kit` by reopening the Thor class through it; a command added that way is
-  listed, takes `--gem`, and gets a help page like any other. See
-  [gem_kit-plugin](https://github.com/n-at-han-k/gem_kit-plugin).
-- The command line is [Thor](https://github.com/rails/thor), so `gem kit` lists
-  the commands and `gem kit help <command>` prints one command's arguments and
-  options.
+  the normal case needs no configuration.
+- `GemKit::Release::Changelog`, a parser and linter for CHANGELOG.md against
+  Keep a Changelog, and `GemKit::Release::VersionFile`, the semver arithmetic
+  and the version-file rewrite.
+- `GemKit::Release::Deprecate`, the deprecation DSL — moved to the `gem_kit`
+  gem in 0.2.0.
