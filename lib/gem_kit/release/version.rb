@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
 module GemKit
-  VERSION = "0.1.0"
+  module Release
+    VERSION = "0.1.0"
+  end
 end
