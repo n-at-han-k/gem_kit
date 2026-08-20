@@ -47,14 +47,39 @@ module GemKit
         version ? changelog.release_problems(version) : changelog.problems
       end
 
+      # What is in the working tree but not in git. A gem built from an
+      # uncommitted tree is a gem whose source exists nowhere — and `bump` and
+      # `changelog --write` leave exactly two such files behind, which is
+      # precisely the moment someone reaches for `release`.
+      #
+      # A directory that is not a git repository is not a problem: this gate
+      # has nothing to say about it.
+      def working_tree_problems
+        return [] unless git?
+
+        dirty = Dir.chdir(project.root) { `git status --porcelain`.lines.map(&:strip) }
+        return [] if dirty.empty?
+
+        ["#{dirty.size} uncommitted change(s) — the gem would match nothing in git:",
+         *dirty.first(10).map { |line| "  #{line}" },
+         *(dirty.size > 10 ? ["  … and #{dirty.size - 10} more"] : []),
+         "",
+         "The bump and the changelog belong in one commit. Or pass --allow-dirty."]
+      end
+
+      def git?
+        Dir.chdir(project.root) { system("git rev-parse --git-dir >/dev/null 2>&1") }
+      end
+
       # Everything standing between the project and releasing `version`.
-      def release_problems(version = project.version)
+      def release_problems(version = project.version, allow_dirty: false)
         problems = []
 
         changelog_problems(version).each { |problem| problems << problem }
         deprecation_problems(version).each do |problem|
           problems << "deprecation due in #{version}: #{problem}"
         end
+        working_tree_problems.each { |problem| problems << problem } unless allow_dirty
 
         problems
       end
@@ -76,10 +101,10 @@ describe "gem_kit/release/gate" do
 
   # A Project stub: the Gate only asks it for a changelog path and a version,
   # and to load the library (a no-op here — the specs drive the registry).
-  stub_project = lambda do |changelog_path, version: "1.0.0"|
-    Struct.new(:changelog_path, :version) do
+  stub_project = lambda do |changelog_path, version: "1.0.0", root: nil|
+    Struct.new(:changelog_path, :version, :root) do
       def load! = true
-    end.new(changelog_path, Gem::Version.new(version))
+    end.new(changelog_path, Gem::Version.new(version), root || File.dirname(changelog_path))
   end
 
   clean_changelog = <<~MD
@@ -151,6 +176,36 @@ describe "gem_kit/release/gate" do
 
         gate.bump_problems("1.1.0").should == []
         gate.upcoming_deprecations("1.1.0").map(&:name).should == ["Old"]
+      end
+    end
+  end
+
+  # The gate that catches what `bump` and `changelog --write` leave behind.
+  it "reports an uncommitted working tree, and clears once it is committed" do
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "CHANGELOG.md"), clean_changelog)
+      system("git init -q #{dir}")
+
+      isolated.call do
+        gate = GemKit::Release::Gate.new(stub_project.call(File.join(dir, "CHANGELOG.md"), root: dir))
+
+        gate.release_problems("1.0.0").first.should.match(/uncommitted change/)
+        gate.release_problems("1.0.0", allow_dirty: true).should == []
+
+        system("git -C #{dir} add -A")
+        system("git -C #{dir} -c user.name=t -c user.email=t@t commit -q -m x")
+        gate.release_problems("1.0.0").should == []
+      end
+    end
+  end
+
+  it "says nothing about a directory that is not a git repository" do
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "CHANGELOG.md"), clean_changelog)
+
+      isolated.call do
+        GemKit::Release::Gate.new(stub_project.call(File.join(dir, "CHANGELOG.md"), root: dir))
+          .working_tree_problems.should == []
       end
     end
   end

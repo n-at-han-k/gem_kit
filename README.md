@@ -65,7 +65,7 @@ gem kit changelog --write     # have an AI CLI write the entry
 gem kit changelog             # lint it
 gem kit deprecations          # what is still outstanding
 gem kit release --dry-run     # run the gates
-gem kit tag --push            # tag it
+gem kit release               # ...then build, push and tag
 ```
 
 | Command | What it does |

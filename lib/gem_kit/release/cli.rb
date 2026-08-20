@@ -105,21 +105,28 @@ module GemKit
         Commands::Deprecations.new(options).call(version)
       end
 
-      desc "release", "Gate, build and push this gem"
+      desc "release", "Gate, build, push and tag this gem"
       long_desc <<~TXT
-        Two gates, both before `gem build` runs:
+        Three gates, all before `gem build` runs:
 
         the changelog must have a non-empty, correctly formatted section for this
-        version, sitting at the top of the released list; and nothing promised to
-        disappear in this version may still be in the tree.
+        version, sitting at the top of the released list; nothing promised to
+        disappear in this version may still be in the tree; and the working tree
+        must be committed, because a gem built from uncommitted files is a gem
+        whose source exists nowhere.
 
-        Then builds the gemspec and pushes it. Requires RubyGems push credentials.
+        Then builds the gemspec, pushes it, and tags the release — after the push,
+        so a tag never names a version that failed to publish. Requires RubyGems
+        push credentials.
+
         --dry-run runs the gates and stops, which is what belongs in CI.
       TXT
       method_option :dry_run, type: :boolean, default: false, aliases: "-n",
                               desc: "Run the gates and stop"
-      method_option :tag, type: :boolean, default: false, aliases: "-t",
-                          desc: "Tag the release after pushing"
+      method_option :tag, type: :boolean, default: true,
+                          desc: "Tag the release and push the tag (--no-tag to skip)"
+      method_option :allow_dirty, type: :boolean, default: false,
+                                  desc: "Release even with uncommitted changes"
       def release
         Commands::Release.new(options).call
       end

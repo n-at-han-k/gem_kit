@@ -9,6 +9,21 @@ files.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-20
+
+### Changed
+
+- **`gem kit release` refuses while the working tree has uncommitted changes.**
+  A gem built from an uncommitted tree is a gem whose source exists nowhere —
+  and `bump` and `changelog --write` leave exactly two such files behind, which
+  is precisely when someone reaches for `release`. `--allow-dirty` overrides
+  it; a directory that is not a git repository is not affected.
+- **`gem kit release` tags.** It was behind `--tag` and did not push; tagging
+  is part of releasing, so it now runs by default and pushes the tag. It runs
+  *after* the gem is pushed, so a tag never names a version that failed to
+  publish. `--no-tag` skips it, and `gem kit tag` still exists for tagging on
+  its own.
+
 ## [0.2.2] - 2026-08-20
 
 ### Fixed

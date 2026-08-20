@@ -8,8 +8,7 @@ gem kit bump --gem gem_kit-release minor           # 2. bump  (prints what to ru
 gem kit changelog --gem gem_kit-release --write    # 3. write the entry
 gem kit changelog --gem gem_kit-release <VERSION>  # 4. check it
 git commit -am "Release ..."                       # 5. commit the bump + changelog
-gem kit release --gem gem_kit-release              # 6. build and push
-gem kit tag --gem gem_kit-release --push           # 7. tag it
+gem kit release --gem gem_kit-release              # 6. gate, build, push, tag
 ```
 
 Steps 2 and 6 are gates: they refuse to proceed when something is missing.
@@ -53,7 +52,7 @@ one, otherwise by substituting the version literal in place — and prints the
 transition:
 
 ```
-0.2.2 -> ...
+0.3.0 -> ...
 
 now run: gem kit changelog --gem gem_kit-release --write
 ```
@@ -82,7 +81,7 @@ The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 ```md
 ## [Unreleased]
 
-## [0.2.2] - 2026-08-20
+## [0.3.0] - 2026-08-20
 
 ### Added
 
@@ -101,7 +100,7 @@ of anything that shipped.
 
 ```sh
 gem kit changelog --gem gem_kit-release              # format only
-gem kit changelog --gem gem_kit-release 0.2.2       # format, plus "is this version ready?"
+gem kit changelog --gem gem_kit-release 0.3.0       # format, plus "is this version ready?"
 ```
 
 Checks the title, that every heading is `## [Unreleased]` or
@@ -119,27 +118,30 @@ unwritten in git is the failure this process exists to prevent.
 ## 6. Release
 
 ```sh
-gem kit release --gem gem_kit-release           # or: gem kit release --gem gem_kit-release --dry-run, which is the CI check
+gem kit release --gem gem_kit-release             # or --dry-run, which is the CI check
 ```
 
-Two gates, both before `gem build` runs:
+Three gates, all before `gem build` runs:
 
 1. **Changelog** — this version needs its own non-empty, correctly formatted
    section, sitting at the top of the released list.
 2. **Deprecations** — nothing promised to disappear in this version may still
    be in the tree.
+3. **The working tree** — everything committed. A gem built from uncommitted
+   files is a gem whose source exists nowhere, and step 2 and step 3 above
+   leave exactly two such files behind. `--allow-dirty` overrides it.
 
-Then `gem build` and `gem push`. Requires RubyGems push credentials.
+Then `gem build`, `gem push`, and the tag — `gem_kit-release-v0.3.0`,
+created and pushed *after* the gem, so a tag never names a version that failed
+to publish. `--no-tag` skips it.
 
-## 7. Tag
+Requires RubyGems push credentials.
 
-```sh
-gem kit tag --gem gem_kit-release --push
-```
+The tag matters beyond bookkeeping: it is what the next
+`gem kit changelog --gem gem_kit-release --write` uses to find the commit range, so a
+missing one makes the following release's changelog harder to write.
 
-Creates `gem_kit-release-v0.2.2`, refusing if it already exists. The tag is also what
-the next `gem kit changelog --gem gem_kit-release --write` uses to find the commit range, so a missing
-one makes the following release's changelog harder to write.
+`gem kit tag --gem gem_kit-release` still exists for tagging on its own.
 
 ## When something goes wrong
 
