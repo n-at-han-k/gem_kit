@@ -34,4 +34,8 @@ gem it belongs to.
   `Thor::Group` generator, the machinery behind `rails generate`, so it reports
   `create` / `identical` / `conflict` per file and takes `--force`, `--skip`
   and `--pretend`.
+- **gem_kit-release** — `GemKit::Release.plugin`, the extension seam. Another
+  gem can add commands to `gem kit` by reopening the Thor class through it; a
+  command added that way is listed, takes `--gem`, and gets a help page like
+  any other. See gem_kit-plugin for a worked example.
 - The gem template this repository used to be now lives under `template/`.

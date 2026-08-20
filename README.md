@@ -113,6 +113,30 @@ $ gem kit changelog --gem gem_kit
 CHANGELOG.md is clean.
 ```
 
+## Extending it
+
+`gem kit` takes commands from other gems. `GemKit::Release.plugin` is the seam:
+
+```ruby
+# lib/gem_kit/plugin.rb, in a gem of your own
+require "gem_kit/release/cli"
+
+GemKit::Release.plugin do
+  desc "lint", "Check this gem for the things gems get wrong"
+  def lint = GemKit::Plugin::Lint.new(options).call
+end
+```
+
+The block is evaluated on the Thor class, so the whole Thor DSL is in scope —
+`desc`, `long_desc`, `method_option`, `map`, and `register` for a `Thor::Group`
+generator. A command added this way is indistinguishable from a built-in one:
+it appears in `gem kit`, takes `--gem`, and gets a help page.
+
+Ship a `lib/rubygems_plugin.rb` that requires your file and RubyGems loads it on
+every `gem` invocation, the same way this gem is loaded. See
+[gem_kit-plugin](https://github.com/n-at-han-k/gem_kit-plugin) for a worked
+example.
+
 ## Layout
 
 ```

@@ -137,6 +137,32 @@ module GemKit
       end
     end
 
+    # The extension seam. A plugin gem adds commands to `gem kit` by reopening
+    # the CLI through this, which is a documented entry point rather than a
+    # class_eval someone reverse-engineered:
+    #
+    #   # lib/gem_kit/plugin.rb, in a gem of your own
+    #   require "gem_kit/release/cli"
+    #
+    #   GemKit::Release.plugin do
+    #     desc "lint", "Check this gem for the things gems get wrong"
+    #     def lint = GemKit::Plugin::Lint.new(options).call
+    #   end
+    #
+    # The block is evaluated on the Thor class, so everything Thor offers is
+    # in scope: `desc`, `long_desc`, `method_option`, `map`, and `register` for
+    # a Thor::Group generator. Commands added this way are indistinguishable
+    # from the built-in ones — they appear in `gem kit`, take `--gem`, and get
+    # a help page.
+    #
+    # Loading is the plugin's own business: ship a lib/rubygems_plugin.rb that
+    # requires your file, and RubyGems will load it on every `gem` invocation,
+    # the same way this gem gets loaded.
+    def self.plugin(&block)
+      CLI.class_eval(&block)
+      CLI
+    end
+
     # Run one invocation. Returns an exit status rather than exiting, so the
     # `gem kit` bridge can hand it to terminate_interaction and the specs can
     # assert on it.
@@ -191,6 +217,57 @@ describe "gem_kit/release/cli" do
   it "fails on an unknown command" do
     with_gem do |dir|
       invoke(["nonsense"], dir).first.should.not == 0
+    end
+  end
+
+  # What a plugin gem does. The command has to be indistinguishable from a
+  # built-in one, or the seam is not worth documenting.
+  it "takes a command from a plugin" do
+    GemKit::Release.plugin do
+      desc "hello NAME", "Say hello from a plugin"
+      def hello(name) = $stdout.puts("hello #{name} (#{options[:gem] || "no --gem"})")
+    end
+
+    begin
+      with_gem do |dir|
+        status, out, _err = invoke(["hello", "world"], dir)
+        status.should == 0
+        out.should.match(/hello world/)
+
+        # The class options reach it too.
+        _status, out, _err = invoke(["hello", "world", "--gem", "demo"], dir)
+        out.should.match(/hello world \(demo\)/)
+
+        # And it is listed and documented like the rest.
+        _status, listing, _err = invoke([], dir)
+        listing.should.match(/gem kit hello NAME/)
+        listing.should.match(/Say hello from a plugin/)
+      end
+    ensure
+      GemKit::Release::CLI.remove_command("hello")
+    end
+  end
+
+  it "hands the plugin the whole Thor DSL, generators included" do
+    generator = Class.new(Thor::Group) do
+      include Thor::Actions
+      def self.banner = "gem kit scaffold"
+      def report = $stdout.puts("scaffolded")
+    end
+    Object.const_set(:PluginScaffoldGenerator, generator) unless defined?(PluginScaffoldGenerator)
+
+    GemKit::Release.plugin do
+      register(PluginScaffoldGenerator, "scaffold", "scaffold", "Scaffold something")
+    end
+
+    begin
+      with_gem do |dir|
+        status, out, _err = invoke(["scaffold"], dir)
+        status.should == 0
+        out.should.match(/scaffolded/)
+      end
+    ensure
+      GemKit::Release::CLI.remove_command("scaffold")
     end
   end
 end
