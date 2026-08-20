@@ -9,12 +9,6 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
-        # Gemfile.lock pins the gems and gemset.nix says where nix fetches each
-        # one. Regenerate the latter with `bundix -l` after touching either.
-        #
-        # No `gemspec` in the Gemfile, so no gemspec has to be smuggled into the
-        # store alongside it: the dependencies are named outright, which is also
-        # the only sane answer when two gemspecs share one bundle.
         gems = pkgs.bundlerEnv {
           name = "gem-kit-gems";
           ruby = pkgs.ruby_3_4;
@@ -36,9 +30,6 @@
           ];
 
           shellHook = ''
-            # A pre-commit hook runs with a minimal environment, and Ruby then
-            # defaults to US-ASCII — which turns every em dash in these sources
-            # into "invalid byte sequence" the moment a file is read.
             export LANG="''${LANG:-C.UTF-8}"
             export LC_ALL="''${LC_ALL:-$LANG}"
 
