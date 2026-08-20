@@ -35,6 +35,8 @@ module GemKit
           version_file.write(target)
           say("#{current} -> #{target}")
 
+          relock(target)
+
           upcoming = gate.upcoming_deprecations(target)
           unless upcoming.empty?
             say("#{upcoming.size} deprecation(s) still outstanding (none due in #{target}).")
@@ -45,6 +47,35 @@ module GemKit
           say
           say("#{RED}now run: gem kit changelog --write#{RESET}")
         end
+
+        private
+
+          # A Gemfile that says `gemspec` or `path: "."` records this gem's own
+          # version in Gemfile.lock, so a bump that only rewrites the version
+          # file leaves the two disagreeing — and bundler refuses outright
+          # under frozen mode, which is what bundlerEnv sets. Relock, so the
+          # bump is one coherent change rather than a trap for the next
+          # command anyone runs.
+          #
+          # `bundle lock` rather than `bundle install`: nothing needs
+          # installing, only the lockfile needs to agree.
+          def relock(target)
+            return unless project.self_locked?
+
+            say("Relocking #{File.basename(project.lockfile_path)}…")
+
+            ok = Dir.chdir(project.root) do
+              # BUNDLE_FROZEN is exactly what stops this, and inheriting it
+              # from an ambient devshell would defeat the point.
+              system({"BUNDLE_FROZEN" => "false", "BUNDLE_GEMFILE" => nil},
+                     "bundle", "lock", out: File::NULL, err: File::NULL)
+            end
+
+            return if ok
+
+            say("#{RED}could not relock — run `bundle lock` before committing " \
+                "#{target}#{RESET}")
+          end
       end
     end
   end
@@ -92,6 +123,44 @@ describe "gem_kit/release/commands/bump" do
       status.should == 0
       out.should.match(/--force given; bumping past 1 deprecation/)
       File.read(File.join(dir, "lib/demo/version.rb")).should.match(/"2\.0\.0"/)
+    end
+  end
+
+  # The version lives in two files when a gem is in its own bundle, and a bump
+  # that moves one of them leaves bundler refusing to do anything.
+  it "relocks a lockfile that records this gem's own version" do
+    with_gem do |dir|
+      File.write(File.join(dir, "Gemfile"), %(source "https://rubygems.org"\ngemspec\n))
+      File.write(File.join(dir, "Gemfile.lock"), <<~LOCK)
+        PATH
+          remote: .
+          specs:
+            demo (1.2.3)
+
+        GEM
+          remote: https://rubygems.org/
+
+        PLATFORMS
+          ruby
+
+        DEPENDENCIES
+          demo!
+
+        BUNDLED WITH
+           2.7.2
+      LOCK
+
+      _status, out, _err = invoke(["bump", "minor"], dir)
+
+      out.should.match(/Relocking Gemfile\.lock/)
+      File.read(File.join(dir, "Gemfile.lock")).should.match(/demo \(1\.3\.0\)/)
+    end
+  end
+
+  it "says nothing about a lockfile that does not record this gem" do
+    with_gem do |dir|
+      _status, out, _err = invoke(["bump", "minor"], dir)
+      out.should.not.match(/Relocking/)
     end
   end
 

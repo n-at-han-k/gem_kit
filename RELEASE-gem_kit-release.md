@@ -52,7 +52,7 @@ one, otherwise by substituting the version literal in place — and prints the
 transition:
 
 ```
-0.3.0 -> ...
+0.3.1 -> ...
 
 now run: gem kit changelog --gem gem_kit-release --write
 ```
@@ -81,7 +81,7 @@ The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 ```md
 ## [Unreleased]
 
-## [0.3.0] - 2026-08-20
+## [0.3.1] - 2026-08-20
 
 ### Added
 
@@ -100,7 +100,7 @@ of anything that shipped.
 
 ```sh
 gem kit changelog --gem gem_kit-release              # format only
-gem kit changelog --gem gem_kit-release 0.3.0       # format, plus "is this version ready?"
+gem kit changelog --gem gem_kit-release 0.3.1       # format, plus "is this version ready?"
 ```
 
 Checks the title, that every heading is `## [Unreleased]` or
@@ -131,7 +131,7 @@ Three gates, all before `gem build` runs:
    files is a gem whose source exists nowhere, and step 2 and step 3 above
    leave exactly two such files behind. `--allow-dirty` overrides it.
 
-Then `gem build`, `gem push`, and the tag — `gem_kit-release-v0.3.0`,
+Then `gem build`, `gem push`, and the tag — `gem_kit-release-v0.3.1`,
 created and pushed *after* the gem, so a tag never names a version that failed
 to publish. `--no-tag` skips it.
 

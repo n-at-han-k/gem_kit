@@ -105,6 +105,21 @@ module GemKit
         multi_gem? ? "CHANGELOG-#{name}.md" : "CHANGELOG.md"
       end
 
+      def lockfile_path
+        File.join(root, "Gemfile.lock")
+      end
+
+      # A Gemfile that says `gemspec` or `path: "."` puts this gem in its own
+      # bundle, and the lockfile then records this gem's version. Bumping
+      # without relocking leaves the two disagreeing — which bundler reports as
+      # "the gemspecs for path gems changed", and refuses outright under
+      # frozen mode, as bundlerEnv sets.
+      def self_locked?
+        return false unless File.exist?(lockfile_path)
+
+        File.read(lockfile_path).match?(/^\s{4}#{Regexp.escape(name)} \(\d/)
+      end
+
       # `v1.2.3` says which version but not which gem, which is fine until a
       # repository holds two of them at the same version.
       def tag_prefix
@@ -249,6 +264,38 @@ describe "gem_kit/release/project" do
   it "bumps to the next major for the default deprecation deadline" do
     with_project.call(version: "4.1.0") do |dir|
       GemKit::Release::Project.detect(dir).next_major_version.should == "5.0"
+    end
+  end
+
+  # A gem whose own Gemfile pulls it in has its version written in the lockfile
+  # as well as the version file, and both have to move together.
+  it "knows whether the lockfile records this gem's own version" do
+    with_project.call do |dir|
+      GemKit::Release::Project.detect(dir).self_locked?.should.be.false
+
+      File.write(File.join(dir, "Gemfile.lock"), <<~LOCK)
+        PATH
+          remote: .
+          specs:
+            demo (1.2.3)
+
+        GEM
+          remote: https://rubygems.org/
+      LOCK
+      GemKit::Release::Project.detect(dir).self_locked?.should.be.true
+    end
+  end
+
+  it "does not mistake another gem's line in the lockfile for its own" do
+    with_project.call do |dir|
+      File.write(File.join(dir, "Gemfile.lock"), <<~LOCK)
+        GEM
+          remote: https://rubygems.org/
+          specs:
+            other-demo (1.0.0)
+            demo-helper (2.0.0)
+      LOCK
+      GemKit::Release::Project.detect(dir).self_locked?.should.be.false
     end
   end
 

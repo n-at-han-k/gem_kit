@@ -9,6 +9,18 @@ files.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-20
+
+### Fixed
+
+- `gem kit bump` relocks Gemfile.lock. A Gemfile that says `gemspec` or
+  `path: "."` records the gem's own version in the lockfile, so rewriting only
+  the version file left the two disagreeing — which bundler reports as "the
+  gemspecs for path gems changed" and refuses outright under frozen mode, as
+  bundlerEnv sets. Every command in the project's devshell then failed until
+  someone ran `bundle lock` by hand. It runs `bundle lock` itself now, and says
+  so; a project whose lockfile does not record it is untouched.
+
 ## [0.3.0] - 2026-08-20
 
 ### Changed
