@@ -38,12 +38,18 @@ module GemKit
         # run from a subdirectory still belongs to the gem.
         def self.banner = "gem kit setup"
 
+        # The policy is the repository's — one deprecation policy governs every
+        # gem in it — so DEPRECATIONS.md is written once, whichever gem you
+        # named.
         def deprecations_document
           template("DEPRECATIONS.md.erb", File.join(project.root, "DEPRECATIONS.md"))
         end
 
+        # The process is the gem's: every command in it names a version and a
+        # changelog belonging to one gem. So a repository with two gems gets
+        # RELEASE-<gem>.md apiece, matching the changelogs.
         def release_document
-          template("RELEASE.md.erb", File.join(project.root, "RELEASE.md"))
+          template("RELEASE.md.erb", File.join(project.root, release_document_name))
         end
 
         def where_to_link_them
@@ -54,9 +60,56 @@ module GemKit
         # Everything below is machinery, not a step. Thor runs every public
         # method of a Thor::Group in order, so helpers have to say so.
         no_commands do
+          # Every command in a multi-gem repository needs to say which gem it
+          # means, so the examples show it.
+          # Pads a command so the trailing comments line up whatever the gem
+          # is called.
+          def step(command) = command.ljust(step_width)
+
+          def step_width
+            @step_width ||= [30, "gem kit changelog#{gem_flag} <VERSION>".length + 2].max
+          end
+
+          def multi_gem  = project.multi_gem?
+          def tag_prefix = project.tag_prefix
+
+          # DEPRECATIONS.md is written once for the repository, so everything
+          # it says has to hold for every gem in it — no version numbers, and
+          # no link to one gem's changelog.
+          def deadline_rule
+            if multi_gem
+              "The usual deadline is the next major of the gem the name lives in."
+            else
+              "The current version is #{version}, so the usual deadline is #{next_major}."
+            end
+          end
+
+          def changelog_reference
+            multi_gem ? "that gem's changelog" : "`#{changelog}`"
+          end
+
+          def release_document_link
+            multi_gem ? "The RELEASE-<gem>.md beside it" : "[RELEASE.md](RELEASE.md)"
+          end
+
+          def gem_flag
+            project.multi_gem? ? " --gem #{project.name}" : ""
+          end
+
+          def release_document_name
+            project.multi_gem? ? "RELEASE-#{project.name}.md" : "RELEASE.md"
+          end
+
           # The values the templates render against. Kept small and obvious — a
           # template needing more than this is documenting the tool, not the
           # project.
+          # DEPRECATIONS.md is the repository's, so what it is *about* must not
+          # depend on which gem you named — otherwise running setup for the
+          # second gem rewrites the first gem's document.
+          def subject
+            project.multi_gem? ? File.basename(project.root) : project.name
+          end
+
           def name       = project.name
           def version    = project.version.to_s
           def next_major = project.next_major_version
@@ -158,6 +211,35 @@ describe "gem_kit/release/generators/setup" do
     with_gem do |dir|
       invoke(["init"], dir).first.should == 0
       File.exist?(File.join(dir, "RELEASE.md")).should.be.true
+    end
+  end
+
+  # In a repository with several gems the process document is per-gem, but the
+  # policy is the repository's — so running setup for the second gem must not
+  # rewrite what the first one wrote.
+  it "writes a release document per gem and one policy for the repository" do
+    with_gem(second_gem: true) do |dir|
+      _status, first, _err  = invoke(["setup", "--gem", "demo"], dir)
+      _status, second, _err = invoke(["setup", "--gem", "other"], dir)
+
+      first.should.match(/create.*DEPRECATIONS\.md/)
+      first.should.match(/create.*RELEASE-demo\.md/)
+
+      second.should.match(/identical.*DEPRECATIONS\.md/)
+      second.should.match(/create.*RELEASE-other\.md/)
+
+      File.exist?(File.join(dir, "RELEASE.md")).should.be.false
+    end
+  end
+
+  it "spells the commands with --gem when the repository holds several" do
+    with_gem(second_gem: true) do |dir|
+      invoke(["setup", "--gem", "demo"], dir)
+
+      release = File.read(File.join(dir, "RELEASE-demo.md"))
+      release.should.match(/gem kit bump --gem demo/)
+      release.should.match(/CHANGELOG-demo\.md/)
+      release.should.match(/demo-v1\.2\.3/)
     end
   end
 

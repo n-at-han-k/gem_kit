@@ -17,7 +17,7 @@ require_relative "../../lib/gem_kit/release/cli"
 module GemKitReleaseSpec
   # A throwaway gem laid out the conventional way, with a clean changelog
   # unless asked otherwise.
-  def with_gem(version: "1.2.3", changelog: :clean)
+  def with_gem(version: "1.2.3", changelog: :clean, second_gem: false)
     Dir.mktmpdir do |dir|
       FileUtils.mkdir_p(File.join(dir, "lib/demo"))
       File.write(File.join(dir, "lib/demo/version.rb"), %(module Demo\n  VERSION = "#{version}"\nend\n))
@@ -32,6 +32,18 @@ module GemKitReleaseSpec
           spec.files = []
         end
       RUBY
+
+      if second_gem
+        File.write(File.join(dir, "other.gemspec"), <<~RUBY)
+          Gem::Specification.new do |spec|
+            spec.name = "other"
+            spec.version = "#{version}"
+            spec.authors = ["x"]
+            spec.summary = "x"
+            spec.files = []
+          end
+        RUBY
+      end
 
       if changelog == :clean
         File.write(File.join(dir, "CHANGELOG.md"), <<~MD)

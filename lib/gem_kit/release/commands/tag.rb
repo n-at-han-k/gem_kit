@@ -13,7 +13,7 @@ module GemKit
 
 
         def call
-          tag = "#{options.fetch(:prefix, "v")}#{project.version}"
+          tag = "#{options[:prefix] || project.tag_prefix}#{project.version}"
 
           Dir.chdir(project.root) do
             fail_with("not a git repository") unless system("git rev-parse --git-dir >/dev/null 2>&1")
@@ -56,6 +56,28 @@ describe "gem_kit/release/commands/tag" do
       out.should.match(/Tagged v1\.2\.3/)
       out.should.match(/git push origin v1\.2\.3/)
       `git -C #{dir} tag -l`.strip.should == "v1.2.3"
+    end
+  end
+
+  # Two gems at the same version in one repository would otherwise fight over
+  # a single `v0.1.0`.
+  it "namespaces the tag by gem when the repository holds several" do
+    with_gem do |dir|
+      as_repo.call(dir)
+      File.write(File.join(dir, "other.gemspec"), <<~RUBY)
+        Gem::Specification.new do |spec|
+          spec.name = "other"
+          spec.version = "1.2.3"
+          spec.authors = ["x"]
+          spec.summary = "x"
+          spec.files = []
+        end
+      RUBY
+
+      invoke(["tag", "--gem", "demo"], dir).first.should == 0
+      invoke(["tag", "--gem", "other"], dir).first.should == 0
+
+      `git -C #{dir} tag -l`.split.sort.should == ["demo-v1.2.3", "other-v1.2.3"]
     end
   end
 

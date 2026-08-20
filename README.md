@@ -110,8 +110,25 @@ $ gem kit changelog
 2 gemspecs in /home/you/src/gem_kit (gem_kit-release, gem_kit); name one with --gem
 
 $ gem kit changelog --gem gem_kit
-CHANGELOG.md is clean.
+CHANGELOG-gem_kit.md is clean.
 ```
+
+Three things follow from a repository holding several gems, and `gem kit`
+arranges all three itself:
+
+| | One gem | Several |
+| --- | --- | --- |
+| Changelog | `CHANGELOG.md` | `CHANGELOG-<gem>.md` |
+| Release document | `RELEASE.md` | `RELEASE-<gem>.md` |
+| Tag | `v1.2.3` | `<gem>-v1.2.3` |
+
+The changelog has to be per-gem: the release gate asks whether the version
+being cut is the *topmost* released section, and two gems interleaved in one
+file means the older one never is — so the second gem could never be released.
+The tag has to be per-gem because `v1.2.3` says which version but not which
+gem, which is fine until two of them are at the same one. `DEPRECATIONS.md` is
+written once for the repository, because one deprecation policy governs
+everything in it.
 
 ## Extending it
 

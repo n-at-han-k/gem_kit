@@ -1,6 +1,6 @@
 # Deprecations
 
-A deprecation in <%= subject %> is a **dated promise**: it names the replacement
+A deprecation in gem_kit is a **dated promise**: it names the replacement
 *and* the version the old name stops existing in. That promise is
 machine-readable — every declaration registers itself, and the release tooling
 refuses to ship a version that breaks one.
@@ -12,7 +12,7 @@ built on [`Gem::Deprecate`](https://docs.ruby-lang.org/en/master/Gem/Deprecate.h
 
 1. **Never delete a public name outright.** Leave it working, deprecated, until
    its deadline.
-2. **Every deprecation names a removal version.** <%= deadline_rule %>
+2. **Every deprecation names a removal version.** The usual deadline is the next major of the gem the name lives in.
 3. **Removals happen in major versions only.** A minor or patch release never
    takes a name away.
 4. **The deadline is enforced, not remembered.** `gem kit bump` and `gem kit release`
@@ -32,7 +32,7 @@ class Session
 
   def old_reset = new_reset
 
-  deprecate :old_reset, "Session#new_reset", "<%= next_major %>"
+  deprecate :old_reset, "Session#new_reset", "1.0"
 end
 ```
 
@@ -40,14 +40,14 @@ The old method keeps working and warns on every call, naming the caller:
 
 ```
 NOTE: Session#old_reset is deprecated; use Session#new_reset instead.
-It will be removed in <%= next_major %>
+It will be removed in 1.0
 Session#old_reset called from app.rb:12.
 ```
 
 Use `:none` as the replacement when there genuinely isn't one:
 
 ```ruby
-deprecate :old_reset, :none, "<%= next_major %>"
+deprecate :old_reset, :none, "1.0"
 ```
 
 For a class method, follow the `Gem::Deprecate` idiom — the registry records it
@@ -56,7 +56,7 @@ against the class, not its singleton:
 ```ruby
 class << self
   extend GemKit::Deprecate
-  deprecate :some_class_method, "Other.method", "<%= next_major %>"
+  deprecate :some_class_method, "Other.method", "1.0"
 end
 ```
 
@@ -69,7 +69,7 @@ its body:
 module Old
   class Thing < New::Thing
     extend GemKit::Deprecate
-    superseded_by "New::Thing", "<%= next_major %>"
+    superseded_by "New::Thing", "1.0"
   end
 end
 ```
@@ -88,8 +88,8 @@ gem kit deprecations
 ```
 
 ```
-1 outstanding deprecation(s) (current version <%= version %>):
-  <%= next_major %>      Session#old_reset -> Session#new_reset
+1 outstanding deprecation(s) (current version 0.1.0):
+  1.0      Session#old_reset -> Session#new_reset
            lib/session.rb:19
 ```
 
@@ -97,15 +97,15 @@ Pass a version to ask "what comes due here?" — it exits non-zero if anything
 does, which is what makes it usable as a gate in CI:
 
 ```sh
-gem kit deprecations <%= next_major %>.0
+gem kit deprecations 1.0.0
 ```
 
 Programmatically, the same data:
 
 ```ruby
 GemKit::Deprecate.registry                  # every declaration
-GemKit::Deprecate.pending("<%= next_major %>.0")   # deadlines that have arrived
-GemKit::Deprecate.upcoming("<%= next_major %>.0")  # still in their grace period
+GemKit::Deprecate.pending("1.0.0")   # deadlines that have arrived
+GemKit::Deprecate.upcoming("1.0.0")  # still in their grace period
 ```
 
 Each entry carries `name`, `replacement`, `removed_in` and `declared_at`.
@@ -117,9 +117,9 @@ code is actually gone:
 
 ```
 $ gem kit bump major
-ERROR:  Refusing to bump <%= version %> -> <%= next_major %>.0:
+ERROR:  Refusing to bump 0.1.0 -> 1.0.0:
 
-  <%= next_major %>      Session#old_reset -> Session#new_reset
+  1.0      Session#old_reset -> Session#new_reset
            lib/session.rb:19
 
   Remove them, then bump. Override with --force.
@@ -127,11 +127,11 @@ ERROR:  Refusing to bump <%= version %> -> <%= next_major %>.0:
 
 So the order of work is:
 
-1. `gem kit deprecations <%= next_major %>.0` — read the list.
+1. `gem kit deprecations 1.0.0` — read the list.
 2. Delete each deprecated name and its specs. For a constant shim, that means
    deleting the whole file.
 3. Update anything in `examples/` and the docs still using the old name.
-4. Record the removals in <%= changelog_reference %> under `### Removed`.
+4. Record the removals in that gem's changelog under `### Removed`.
 5. `gem kit bump major` — now it goes through.
 
 `--force` exists for the case where you have decided to extend a grace period,
@@ -166,7 +166,7 @@ end
 
 ## See also
 
-- <%= release_document_link %> — where the deprecation gates sit in the release
+- The RELEASE-<gem>.md beside it — where the deprecation gates sit in the release
   process.
 - The changelog — its `### Deprecated` and `### Removed` sections are the
   user-facing half of all this.

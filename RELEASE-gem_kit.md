@@ -1,15 +1,15 @@
-# Releasing <%= name %>
+# Releasing gem_kit
 
 The whole process, in order:
 
 ```sh
-<%= step(test)                             %># 1. green suite
-<%= step("gem kit bump#{gem_flag} minor")  %># 2. bump  (prints what to run next)
-<%= step("gem kit changelog#{gem_flag} --write") %># 3. write the entry
-<%= step("gem kit changelog#{gem_flag} <VERSION>") %># 4. check it
-<%= step(%(git commit -am "Release ..."))  %># 5. commit the bump + changelog
-<%= step("gem kit release#{gem_flag}")     %># 6. build and push
-<%= step("gem kit tag#{gem_flag} --push")  %># 7. tag it
+bin/test                                   # 1. green suite
+gem kit bump --gem gem_kit minor           # 2. bump  (prints what to run next)
+gem kit changelog --gem gem_kit --write    # 3. write the entry
+gem kit changelog --gem gem_kit <VERSION>  # 4. check it
+git commit -am "Release ..."               # 5. commit the bump + changelog
+gem kit release --gem gem_kit              # 6. build and push
+gem kit tag --gem gem_kit --push           # 7. tag it
 ```
 
 Steps 2 and 6 are gates: they refuse to proceed when something is missing.
@@ -17,8 +17,8 @@ Everything below is what they check and why.
 
 ## Versioning
 
-<%= name %> is [semver](https://semver.org/). The version lives in one place —
-`<%= version_file %>` — and is only ever changed by `gem kit bump<%= gem_flag %>`.
+gem_kit is [semver](https://semver.org/). The version lives in one place —
+`lib/gem_kit/version.rb` — and is only ever changed by `gem kit bump --gem gem_kit`.
 
 | Segment | When | What it may contain |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ Everything below is what they check and why.
 Two rules follow from this, and both are enforced in code:
 
 - **Removals only ever land in a major version.** A name promised to disappear
-  in <%= next_major %> disappears in <%= next_major %>.0, not in a patch.
+  in 1.0 disappears in 1.0.0, not in a patch.
 - **Deprecating is a minor.** Adding a deprecation puts no obligation on the
   user *yet*, so it does not need a major — but it starts the clock. See
   [DEPRECATIONS.md](DEPRECATIONS.md).
@@ -37,7 +37,7 @@ Two rules follow from this, and both are enforced in code:
 ## 1. Green suite
 
 ```sh
-<%= test %>
+bin/test
 ```
 
 A red suite is not a release candidate; nothing downstream checks this for you.
@@ -45,17 +45,17 @@ A red suite is not a release candidate; nothing downstream checks this for you.
 ## 2. Bump
 
 ```sh
-gem kit bump<%= gem_flag %> <major|minor|patch>
+gem kit bump --gem gem_kit <major|minor|patch>
 ```
 
-Rewrites `<%= version_file %>` — by rendering its `.erb` template if there is
+Rewrites `lib/gem_kit/version.rb` — by rendering its `.erb` template if there is
 one, otherwise by substituting the version literal in place — and prints the
 transition:
 
 ```
-<%= version %> -> ...
+0.1.0 -> ...
 
-now run: gem kit changelog<%= gem_flag %> --write
+now run: gem kit changelog --gem gem_kit --write
 ```
 
 **It refuses to bump onto a deprecation deadline.** If any registered
@@ -67,12 +67,12 @@ reported for information, not blocked on.
 ## 3. Changelog
 
 ```sh
-gem kit changelog<%= gem_flag %> --write
+gem kit changelog --gem gem_kit --write
 ```
 
 Hands the entry to the AI CLI named by `config.changelog_writer` (default:
 `claude`), with a prompt describing the format and this project's conventions.
-It reads the commits since the last tag and edits `<%= changelog %>` only.
+It reads the commits since the last tag and edits `CHANGELOG-gem_kit.md` only.
 
 Review what it writes. It is a first draft with the commits in front of it, not
 an oracle — it cannot know which of two changes mattered to users.
@@ -82,7 +82,7 @@ The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 ```md
 ## [Unreleased]
 
-## [<%= version %>] - <%= today %>
+## [0.1.0] - 2026-08-20
 
 ### Added
 
@@ -90,7 +90,7 @@ The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 
 ### Deprecated
 
-- `Old::Name` — use `New::Name` instead. Removed in <%= next_major %>.
+- `Old::Name` — use `New::Name` instead. Removed in 1.0.
 ```
 
 Entries go under `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` or
@@ -100,15 +100,15 @@ of anything that shipped.
 ## 4. Lint the changelog
 
 ```sh
-gem kit changelog<%= gem_flag %>              # format only
-gem kit changelog<%= gem_flag %> <%= version %>       # format, plus "is this version ready?"
+gem kit changelog --gem gem_kit              # format only
+gem kit changelog --gem gem_kit 0.1.0       # format, plus "is this version ready?"
 ```
 
 Checks the title, that every heading is `## [Unreleased]` or
 `## [1.2.3] - YYYY-MM-DD`, that versions are valid, dated, unique and ordered
 newest-first, that `###` sections are one of the six types and none are empty —
 and, given a version, that it has a non-empty section at the top of the released
-list. Every problem is reported as `<%= changelog %>:<line> <what>`.
+list. Every problem is reported as `CHANGELOG-gem_kit.md:<line> <what>`.
 
 ## 5. Commit
 
@@ -119,7 +119,7 @@ unwritten in git is the failure this process exists to prevent.
 ## 6. Release
 
 ```sh
-gem kit release<%= gem_flag %>           # or: gem kit release<%= gem_flag %> --dry-run, which is the CI check
+gem kit release --gem gem_kit           # or: gem kit release --gem gem_kit --dry-run, which is the CI check
 ```
 
 Two gates, both before `gem build` runs:
@@ -134,26 +134,26 @@ Then `gem build` and `gem push`. Requires RubyGems push credentials.
 ## 7. Tag
 
 ```sh
-gem kit tag<%= gem_flag %> --push
+gem kit tag --gem gem_kit --push
 ```
 
-Creates `<%= tag_prefix %><%= version %>`, refusing if it already exists. The tag is also what
-the next `gem kit changelog<%= gem_flag %> --write` uses to find the commit range, so a missing
+Creates `gem_kit-v0.1.0`, refusing if it already exists. The tag is also what
+the next `gem kit changelog --gem gem_kit --write` uses to find the commit range, so a missing
 one makes the following release's changelog harder to write.
 
 ## When something goes wrong
 
-**Published a broken gem.** Don't delete it — `gem yank <%= name %> -v X.Y.Z` if
+**Published a broken gem.** Don't delete it — `gem yank gem_kit -v X.Y.Z` if
 it is genuinely dangerous, otherwise ship a patch. Yanking a version other
 people have already locked to breaks their builds.
 
 **Bumped but the release failed.** The bump is just a file. Fix the cause and
-re-run `gem kit release<%= gem_flag %>`; there is no need to un-bump.
+re-run `gem kit release --gem gem_kit`; there is no need to un-bump.
 
 **Changelog written for the wrong version.** Edit the heading and re-run
-`gem kit changelog<%= gem_flag %> <version>`. Nothing downstream caches it.
+`gem kit changelog --gem gem_kit <version>`. Nothing downstream caches it.
 
 ## See also
 
 - [DEPRECATIONS.md](DEPRECATIONS.md) — the deprecation policy the gates enforce.
-- [<%= changelog %>](<%= changelog %>).
+- [CHANGELOG-gem_kit.md](CHANGELOG-gem_kit.md).

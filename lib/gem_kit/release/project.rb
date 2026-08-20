@@ -84,8 +84,31 @@ module GemKit
         "#{version.segments.first.to_i + 1}.0"
       end
 
+      # Every gemspec beside this one, this one included. A repository with
+      # more than one releases each gem on its own schedule, and several things
+      # below have to know that.
+      def siblings
+        @siblings ||= Dir[File.join(root, "*.gemspec")].size
+      end
+
+      def multi_gem? = siblings > 1
+
+      # One changelog per gem. A shared file cannot work: the release gate asks
+      # whether the version being cut is the *topmost* released section, and
+      # two gems interleaved in one file means the older one never is — so the
+      # second gem could never be released.
       def changelog_path
-        File.expand_path(config.changelog || "CHANGELOG.md", root)
+        File.expand_path(config.changelog || default_changelog, root)
+      end
+
+      def default_changelog
+        multi_gem? ? "CHANGELOG-#{name}.md" : "CHANGELOG.md"
+      end
+
+      # `v1.2.3` says which version but not which gem, which is fine until a
+      # repository holds two of them at the same version.
+      def tag_prefix
+        multi_gem? ? "#{name}-v" : "v"
       end
 
       # lib/gem_kit/release/version.rb for "gem_kit-release", lib/brute/version.rb
@@ -182,7 +205,44 @@ describe "gem_kit/release/project" do
 
   it "defaults the changelog to CHANGELOG.md in the project root" do
     with_project.call do |dir|
-      GemKit::Release::Project.detect(dir).changelog_path.should == File.join(dir, "CHANGELOG.md")
+      project = GemKit::Release::Project.detect(dir)
+      project.multi_gem?.should.be.false
+      project.changelog_path.should == File.join(dir, "CHANGELOG.md")
+      project.tag_prefix.should == "v"
+    end
+  end
+
+  # One changelog and one tag namespace per gem, because a repository with two
+  # gems releases them separately.
+  it "gives each gem its own changelog and tag prefix when there are several" do
+    with_project.call(name: "demo") do |dir|
+      File.write(File.join(dir, "other.gemspec"), <<~RUBY)
+        Gem::Specification.new do |spec|
+          spec.name = "other"
+          spec.version = "9.9.9"
+          spec.authors = ["x"]
+          spec.summary = "x"
+          spec.files = []
+        end
+      RUBY
+
+      project = GemKit::Release::Project.detect(dir, name: "demo")
+      project.multi_gem?.should.be.true
+      project.changelog_path.should == File.join(dir, "CHANGELOG-demo.md")
+      project.tag_prefix.should == "demo-v"
+
+      GemKit::Release::Project.detect(dir, name: "other").changelog_path
+        .should == File.join(dir, "CHANGELOG-other.md")
+    end
+  end
+
+  it "an explicit changelog still overrides, in either kind of repository" do
+    with_project.call(name: "demo") do |dir|
+      File.write(File.join(dir, "other.gemspec"), "Gem::Specification.new { |s| s.name = \"other\" }")
+
+      config = GemKit::Release::Project::Config.new(changelog: "HISTORY.md")
+      GemKit::Release::Project.detect(dir, name: "demo", config: config).changelog_path
+        .should == File.join(dir, "HISTORY.md")
     end
   end
 

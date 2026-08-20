@@ -130,8 +130,8 @@ module GemKit
       TXT
       method_option :push, type: :boolean, default: false, aliases: "-p",
                            desc: "Push the tag to origin"
-      method_option :prefix, type: :string, default: "v",
-                             desc: "Tag name prefix"
+      method_option :prefix, type: :string,
+                             desc: "Tag name prefix (default: v, or <gem>-v in a multi-gem repository)"
       def tag
         Commands::Tag.new(options).call
       end

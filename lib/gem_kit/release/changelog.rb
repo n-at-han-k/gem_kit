@@ -307,7 +307,11 @@ describe "gem_kit/release/changelog" do
     changelog.call("## nonsense\n").release_problems("4.1.0").first.should.match(/malformed version heading/)
   end
 
-  it "loads the repo's own CHANGELOG.md" do
-    GemKit::Release::Changelog.load.missing?.should.be.false
+  # Named explicitly: this repository holds two gems, so it has two changelogs
+  # and no plain CHANGELOG.md.
+  it "loads a changelog from a path" do
+    root = File.expand_path("../../..", __dir__)
+    GemKit::Release::Changelog.load(File.join(root, "CHANGELOG-gem_kit.md"))
+      .missing?.should.be.false
   end
 end
