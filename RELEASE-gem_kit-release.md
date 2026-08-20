@@ -53,7 +53,7 @@ one, otherwise by substituting the version literal in place — and prints the
 transition:
 
 ```
-0.2.1 -> ...
+0.2.2 -> ...
 
 now run: gem kit changelog --gem gem_kit-release --write
 ```
@@ -82,7 +82,7 @@ The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 ```md
 ## [Unreleased]
 
-## [0.2.1] - 2026-08-20
+## [0.2.2] - 2026-08-20
 
 ### Added
 
@@ -101,7 +101,7 @@ of anything that shipped.
 
 ```sh
 gem kit changelog --gem gem_kit-release              # format only
-gem kit changelog --gem gem_kit-release 0.2.1       # format, plus "is this version ready?"
+gem kit changelog --gem gem_kit-release 0.2.2       # format, plus "is this version ready?"
 ```
 
 Checks the title, that every heading is `## [Unreleased]` or
@@ -137,7 +137,7 @@ Then `gem build` and `gem push`. Requires RubyGems push credentials.
 gem kit tag --gem gem_kit-release --push
 ```
 
-Creates `gem_kit-release-v0.2.1`, refusing if it already exists. The tag is also what
+Creates `gem_kit-release-v0.2.2`, refusing if it already exists. The tag is also what
 the next `gem kit changelog --gem gem_kit-release --write` uses to find the commit range, so a missing
 one makes the following release's changelog harder to write.
 

@@ -173,7 +173,12 @@ module GemKit
     def self.run(arguments, out: $stdout, err: $stderr)
       CLI.start(arguments)
       0
-    rescue Failure => failure
+    rescue Failure, Project::NotFound, Project::Ambiguous => failure
+      # NotFound and Ambiguous are rescued here rather than only in
+      # Commands::Command#project, because a Project is lazy: `detect` succeeds
+      # on a gemspec that exists, and the failure surfaces later, from whichever
+      # command first asks for `version` or `spec`. Catching it at the entry
+      # point is the only place that covers all of them.
       err.puts(failure.message)
       1
     rescue SystemExit => exit_exception
@@ -215,6 +220,20 @@ describe "gem_kit/release/cli" do
       out.should.match(/SEGMENT/)
       out.should.match(/--force/)
       out.should.match(/deprecation deadline/)
+    end
+  end
+
+  # A gemspec that exists but does not parse fails inside Gem::Specification
+  # rather than in Project.detect, which is a different place than it looks.
+  it "reports an unparseable gemspec instead of raising" do
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "demo.gemspec"),
+                 %(Gem::Specification.new do |spec|\n  spec.description = <<~D\n    unterminated\n))
+
+      status, _out, err = invoke(["release", "--dry-run"], dir)
+
+      status.should == 1
+      err.should.match(/could not load .*demo\.gemspec/)
     end
   end
 

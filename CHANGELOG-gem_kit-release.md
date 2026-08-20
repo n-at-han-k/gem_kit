@@ -9,6 +9,17 @@ files.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-20
+
+### Fixed
+
+- A gemspec that exists but does not parse crashed with a Thor backtrace
+  instead of reporting itself. `Project.detect` succeeds on any gemspec that is
+  there — the parse happens later, lazily, in whichever command first asks for
+  the version — so rescuing in `Commands::Command#project` never caught it.
+  `GemKit::Release.run` now rescues `Project::NotFound` and
+  `Project::Ambiguous` too, which is the one place that covers every command.
+
 ## [0.2.1] - 2026-08-20
 
 ### Fixed
