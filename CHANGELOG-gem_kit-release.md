@@ -9,6 +9,17 @@ files.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-20
+
+### Fixed
+
+- 0.2.0 could not be loaded at all once installed. `lib/gem_kit/release.rb` and
+  `lib/gem_kit/release/cli.rb` reached the gem_kit gem with `require_relative
+  "../gem_kit"`, which resolves inside gem_kit-release's own directory — and
+  there is no `lib/gem_kit.rb` there, because that file belongs to the other
+  gem. It worked in the repository the two are developed in, where they share
+  one `lib/`, and nowhere else. Both are plain `require "gem_kit"` now.
+
 ## [0.2.0] - 2026-08-20
 
 ### Changed

@@ -2,7 +2,11 @@
 
 require "thor"
 
-require_relative "../../gem_kit"
+# `require`, not `require_relative`: gem_kit is a separate gem, and inside an
+# installed gem_kit-release there is no ../gem_kit to reach. It works in the
+# monorepo, where both gems share one lib/, which is exactly why this is worth
+# a comment.
+require "gem_kit"
 require_relative "version"
 require_relative "changelog"
 require_relative "project"
