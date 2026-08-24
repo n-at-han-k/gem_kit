@@ -38,6 +38,23 @@ module GemKit
     # Each command here is a thin front for a plain object under CLI::; the
     # work itself is in Gate, VersionFile, Changelog and Deprecate.
     class CLI < Thor
+      # The order the commands go in — printed above the command listing so
+      # nobody has to guess when to commit or when to write the changelog. The
+      # question the process is easy to get wrong on is exactly the one this
+      # answers: the changelog is written *after* the bump, then the two are
+      # committed together, and only then does release run.
+      WORKFLOW = <<~TXT
+        Release, in order:
+
+          1. bin/test                        # green suite
+          2. gem kit bump [SEGMENT]          # move the version, relock the Gemfile
+          3. gem kit changelog --write       # AI CLI drafts this version's entry
+          4. gem kit changelog [VERSION]     # lint the entry, confirm ready to release
+          5. git commit -am "Release ..."    # bump + lockfile + entry, one commit
+          6. gem kit release                 # gate, build, push, tag (also pushes the tag)
+          7. git push                        # publish the release commit
+      TXT
+
       class_option :gem, type: :string,
                          desc: "Which gem, in a repository holding more than one gemspec"
 
@@ -47,6 +64,15 @@ module GemKit
       # `gem kit` with no arguments lists the commands rather than erroring.
       def self.banner(command, _namespace = nil, _subcommand = false)
         "gem kit #{command.usage}"
+      end
+
+      # Prepend the workflow to the top-level `gem kit` help. `gem kit help
+      # <command>` sets subcommand=true and lands here too; that page already
+      # has its own long_desc, so leave it alone.
+      def self.help(shell, subcommand = false)
+        shell.say(WORKFLOW) unless subcommand
+        shell.say unless subcommand
+        super
       end
 
       # Short forms for the three typed most often.
@@ -207,6 +233,33 @@ describe "gem_kit/release/cli" do
 
       %w[setup bump changelog deprecations release tag].each { |name| out.should.match(/#{name}/) }
       out.should.match(/Move the gem version/)
+    end
+  end
+
+  # The order between `bump` and `release` — when to write the changelog and
+  # when to commit — is exactly the question the numbered list answers, so
+  # the top-level help has to print it.
+  it "prints the numbered workflow above the command listing" do
+    with_gem do |dir|
+      _status, out, _err = invoke([], dir)
+
+      out.should.match(/Release, in order:/)
+      out.should.match(/1\. bin\/test/)
+      out.should.match(/2\. gem kit bump/)
+      out.should.match(/5\. git commit/)
+      out.should.match(/6\. gem kit release/)
+      out.should.match(/7\. git push/)
+      # The workflow lands above "Commands:", not swallowed by it.
+      out.index("Release, in order:").should < out.index("Commands:")
+    end
+  end
+
+  # `gem kit help <command>` already has its own long_desc; the workflow
+  # belongs on the top-level page only.
+  it "does not repeat the workflow on a per-command help page" do
+    with_gem do |dir|
+      _status, out, _err = invoke(["help", "bump"], dir)
+      out.should.not.match(/Release, in order:/)
     end
   end
 
