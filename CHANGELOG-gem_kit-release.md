@@ -9,6 +9,34 @@ files.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-30
+
+### Fixed
+
+- **A hyphenated gem whose library is one module is found.** Both the version
+  file and the require path were derived from the gem's name alone, treating
+  every hyphen as a directory separator — `gem_kit-release` is
+  `lib/gem_kit/release`, which is what `bundle gem` produces and was the only
+  layout considered. A hyphenated name whose library is a SINGLE module does
+  not nest: `ag-ui` is `lib/ag_ui.rb` holding `module AgUi`, and the derived
+  `lib/ag/ui` named a path that was never there. `gem kit bump` could not find
+  the version to rewrite, and `load!` warned "could not require" and gave up on
+  detecting deprecations, so a deadline in such a gem was never enforced.
+
+  Both now read the layout off the tree rather than assuming it, preferring the
+  nested form and falling back to the underscored one. Nesting still wins when
+  neither is on disk, since that is what a project about to be generated will
+  become, and an explicit `require_path` / `version_file` still overrides both.
+
+- **The suite no longer depends on nothing above the temp root being a git
+  repository.** Specs build throwaway projects under `Dir.tmpdir` and ask the
+  gate whether they are repositories; git answers by walking up, so a stray
+  `git init` anywhere above — `/tmp` on the machine this was found on — made
+  six specs fail, reporting that repository's untracked files. The gate is
+  right to walk up (a gem in a monorepo subdirectory has its root above it), so
+  the isolation belongs in the tests: they now set `GIT_CEILING_DIRECTORIES` to
+  the temp root, and can only find a repository they created themselves.
+
 ## [0.3.1] - 2026-08-20
 
 ### Fixed

@@ -129,7 +129,10 @@ module GemKit
       # lib/gem_kit/release/version.rb for "gem_kit-release", lib/brute/version.rb
       # for "brute" — the convention every `bundle gem` project follows.
       def version_file
-        File.expand_path(config.version_file || File.join("lib", *name.split("-"), "version.rb"), root)
+        File.expand_path(
+          config.version_file || File.join("lib", *library_segments, "version.rb"),
+          root,
+        )
       end
 
       # An ERB template beside the version file, if the project generates it.
@@ -141,7 +144,36 @@ module GemKit
       # What to require so that deprecation declarations register themselves.
       # "gem_kit-release" -> "gem_kit/release".
       def require_path
-        config.require_path || name.tr("-", "/")
+        config.require_path || library_segments.join("/")
+      end
+
+      # Where the library sits under lib/, as path segments.
+      #
+      # `bundle gem gem_kit-release` NESTS, treating the hyphen as a directory
+      # separator: lib/gem_kit/release.rb, module GemKit::Release. That is the
+      # common case and the one assumed here first.
+      #
+      # But a hyphenated name whose library is a SINGLE module does not nest.
+      # `ag-ui` is lib/ag_ui.rb holding `module AgUi` — hyphen as underscore —
+      # and the nested form names lib/ag/ui.rb, a file that was never there.
+      # Both layouts are conventional and the name alone cannot tell them
+      # apart, so ask the tree: whichever exists is what this project is.
+      #
+      # When neither exists the nested form wins, because that is what
+      # `bundle gem` would have produced and a project with no library yet is
+      # about to become one.
+      def library_segments
+        nested = name.split("-")
+        if exists_under_lib?(nested)
+          nested
+        else
+          flat = [name.tr("-", "_")]
+          if exists_under_lib?(flat)
+            flat
+          else
+            nested
+          end
+        end
       end
 
       # Load the library, so Deprecate's registry reflects this project.
@@ -158,6 +190,15 @@ module GemKit
       def test_command = config.test_command || "bin/test"
 
       def changelog_writer = config.changelog_writer || "claude"
+
+      private
+
+        # A layout is present if the entry file is there, or the directory it
+        # would hold — a gem is free to ship lib/foo/ without lib/foo.rb.
+        def exists_under_lib?(segments)
+          base = File.join(root, "lib", *segments)
+          File.exist?("#{base}.rb") || File.directory?(base)
+        end
     end
   end
 end
@@ -167,10 +208,16 @@ __END__
 describe "gem_kit/release/project" do
   require "tmpdir"
 
-  # A throwaway gem laid out the conventional way.
-  with_project = lambda do |name: "demo", version: "1.2.3", &block|
+  # A throwaway gem. `layout:` picks between the two conventions a hyphenated
+  # name can follow: :nested is `bundle gem`'s lib/gem_kit/release, :flat is a
+  # single-module gem's lib/ag_ui.
+  with_project = lambda do |name: "demo", version: "1.2.3", layout: :nested, &block|
     Dir.mktmpdir do |dir|
-      path = name.split("-")
+      if layout == :flat
+        path = [name.tr("-", "_")]
+      else
+        path = name.split("-")
+      end
       FileUtils.mkdir_p(File.join(dir, "lib", *path))
       File.write(File.join(dir, "lib", *path, "version.rb"), <<~RUBY)
         module #{path.map { |p| p.split("_").map(&:capitalize).join }.join("::")}
@@ -215,6 +262,48 @@ describe "gem_kit/release/project" do
   it "infers the require path from the gem name" do
     with_project.call(name: "gem_kit-release") do |dir|
       GemKit::Release::Project.detect(dir).require_path.should == "gem_kit/release"
+    end
+  end
+
+  # A hyphenated name whose library is one module: lib/ag_ui.rb, not
+  # lib/ag/ui.rb. Deriving the path from the name alone named a file that was
+  # never there, so `gem kit bump` could not find the version and deprecations
+  # went undetected.
+  it "reads an underscored single-module layout off the tree" do
+    with_project.call(name: "ag-ui", layout: :flat) do |dir|
+      project = GemKit::Release::Project.detect(dir)
+      project.require_path.should == "ag_ui"
+      project.version_file.should == File.join(dir, "lib/ag_ui/version.rb")
+    end
+  end
+
+  # Nesting stays the default: it is what `bundle gem` produces, so it is what
+  # a project with no library yet is about to become.
+  it "falls back to the nested layout when neither is on disk" do
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "ag-ui.gemspec"), <<~RUBY)
+        Gem::Specification.new do |spec|
+          spec.name = "ag-ui"
+          spec.version = "0.1.0"
+          spec.authors = ["x"]
+          spec.summary = "x"
+          spec.files = []
+        end
+      RUBY
+      GemKit::Release::Project.detect(dir).require_path.should == "ag/ui"
+    end
+  end
+
+  # An explicit setting still wins over anything read off the tree.
+  it "prefers a configured require path and version file" do
+    with_project.call(name: "ag-ui", layout: :flat) do |dir|
+      config = GemKit::Release::Project::Config.new(
+        require_path: "somewhere/else",
+        version_file: "lib/custom.rb",
+      )
+      project = GemKit::Release::Project.detect(dir, config: config)
+      project.require_path.should == "somewhere/else"
+      project.version_file.should == File.join(dir, "lib/custom.rb")
     end
   end
 

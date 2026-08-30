@@ -12,6 +12,9 @@ require "tmpdir"
 require "fileutils"
 require "stringio"
 
+# Keeps the throwaway projects below from finding a repository above Dir.tmpdir.
+require_relative "git_isolation"
+
 require_relative "../../lib/gem_kit/release/cli"
 
 module GemKitReleaseSpec

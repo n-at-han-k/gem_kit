@@ -98,6 +98,9 @@ __END__
 
 describe "gem_kit/release/gate" do
   require "tmpdir"
+  # These specs ask the gate whether a temp directory is a repository, so the
+  # walk up out of Dir.tmpdir has to be stopped or the answer is the machine's.
+  require_relative "../../../spec/support/git_isolation"
 
   # A Project stub: the Gate only asks it for a changelog path and a version,
   # and to load the library (a no-op here — the specs drive the registry).
