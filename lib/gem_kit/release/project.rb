@@ -156,24 +156,23 @@ module GemKit
       # But a hyphenated name whose library is a SINGLE module does not nest.
       # `ag-ui` is lib/ag_ui.rb holding `module AgUi` — hyphen as underscore —
       # and the nested form names lib/ag/ui.rb, a file that was never there.
-      # Both layouts are conventional and the name alone cannot tell them
-      # apart, so ask the tree: whichever exists is what this project is.
       #
-      # When neither exists the nested form wins, because that is what
+      # A third belongs to bindings. `oo7-rb` and `sqlite3-ruby` are a library
+      # name wearing a suffix that says which language binds it, and the library
+      # underneath drops it: lib/oo7.rb holding `module Oo7`, with
+      # lib/oo7/version.rb beside it. Often the suffix is only there because
+      # RubyGems would not give up the bare name. The nested form names
+      # lib/oo7/rb.rb and the flat one lib/oo7_rb.rb, neither of which was ever
+      # there, so without this a binding gem cannot be bumped at all.
+      #
+      # All three are conventional and the name alone cannot tell them apart, so
+      # ask the tree: whichever exists is what this project is.
+      #
+      # When none exists the nested form wins, because that is what
       # `bundle gem` would have produced and a project with no library yet is
       # about to become one.
       def library_segments
-        nested = name.split("-")
-        if exists_under_lib?(nested)
-          nested
-        else
-          flat = [name.tr("-", "_")]
-          if exists_under_lib?(flat)
-            flat
-          else
-            nested
-          end
-        end
+        layouts.find { |segments| exists_under_lib?(segments) } || nested_layout
       end
 
       # Load the library, so Deprecate's registry reflects this project.
@@ -193,6 +192,31 @@ module GemKit
 
       private
 
+        # The suffixes a binding gem wears, which its library drops.
+        BINDING_SUFFIXES = %w[rb ruby].freeze
+
+        # What a hyphenated name could mean, most conventional first. A name with
+        # no hyphen in it has exactly one meaning and the list says so.
+        def layouts
+          [nested_layout, flat_layout, *binding_layout].uniq
+        end
+
+        def nested_layout = name.split("-")
+
+        def flat_layout = [name.tr("-", "_")]
+
+        # [["oo7"]] for "oo7-rb"; nothing for a name wearing no binding suffix,
+        # and nothing for one that is only the suffix.
+        def binding_layout
+          nested_layout.then do |segments|
+            if segments.length > 1 && BINDING_SUFFIXES.include?(segments.last)
+              [segments[0..-2]]
+            else
+              []
+            end
+          end
+        end
+
         # A layout is present if the entry file is there, or the directory it
         # would hold — a gem is free to ship lib/foo/ without lib/foo.rb.
         def exists_under_lib?(segments)
@@ -208,22 +232,29 @@ __END__
 describe "gem_kit/release/project" do
   require "tmpdir"
 
-  # A throwaway gem. `layout:` picks between the two conventions a hyphenated
+  # A throwaway gem. `layout:` picks between the three conventions a hyphenated
   # name can follow: :nested is `bundle gem`'s lib/gem_kit/release, :flat is a
-  # single-module gem's lib/ag_ui.
+  # single-module gem's lib/ag_ui, and :binding is a bindings gem's lib/oo7 for
+  # a gem called oo7-rb.
   with_project = lambda do |name: "demo", version: "1.2.3", layout: :nested, &block|
     Dir.mktmpdir do |dir|
-      if layout == :flat
-        path = [name.tr("-", "_")]
-      else
-        path = name.split("-")
+      case layout
+      when :flat then path = [name.tr("-", "_")]
+      when :binding then path = name.split("-")[0..-2]
+      else path = name.split("-")
       end
       FileUtils.mkdir_p(File.join(dir, "lib", *path))
-      File.write(File.join(dir, "lib", *path, "version.rb"), <<~RUBY)
-        module #{path.map { |p| p.split("_").map(&:capitalize).join }.join("::")}
-          VERSION = "#{version}"
-        end
-      RUBY
+
+      # Nested blocks rather than `module A::B`, which is only valid once A
+      # exists -- and a throwaway gem's outermost constant never does. The one
+      # hyphenated name that got away with it was gem_kit-release, because this
+      # process has GemKit defined already.
+      constants = path.map { |segment| segment.split("_").map(&:capitalize).join }
+      lines = constants.each_with_index.map { |constant, depth| "#{"  " * depth}module #{constant}" }
+      lines << "#{"  " * constants.length}VERSION = #{version.inspect}"
+      lines.concat(Array.new(constants.length) { |depth| "#{"  " * (constants.length - 1 - depth)}end" })
+
+      File.write(File.join(dir, "lib", *path, "version.rb"), "#{lines.join("\n")}\n")
       File.write(File.join(dir, "#{name}.gemspec"), <<~RUBY)
         require_relative "lib/#{path.join("/")}/version"
         Gem::Specification.new do |spec|
@@ -274,6 +305,44 @@ describe "gem_kit/release/project" do
       project = GemKit::Release::Project.detect(dir)
       project.require_path.should == "ag_ui"
       project.version_file.should == File.join(dir, "lib/ag_ui/version.rb")
+    end
+  end
+
+  # A bindings gem drops the suffix: oo7-rb is lib/oo7.rb and lib/oo7/version.rb,
+  # which neither of the other two layouts names. Found the hard way -- the gem
+  # was called oo7-rb only because RubyGems holds `oo7` for something else, and
+  # `gem kit bump` then wrote to lib/oo7/rb/version.rb, a path nothing had.
+  it "reads a bindings layout, whose library drops the suffix, off the tree" do
+    with_project.call(name: "oo7-rb", layout: :binding) do |dir|
+      project = GemKit::Release::Project.detect(dir)
+      project.require_path.should == "oo7"
+      project.version_file.should == File.join(dir, "lib/oo7/version.rb")
+    end
+  end
+
+  it "reads a -ruby suffix the same way" do
+    with_project.call(name: "sqlite3-ruby", layout: :binding) do |dir|
+      project = GemKit::Release::Project.detect(dir)
+      project.version_file.should == File.join(dir, "lib/sqlite3/version.rb")
+    end
+  end
+
+  # The suffix is only dropped when the tree says so. A gem that genuinely nests
+  # under a segment called "rb" keeps it.
+  it "keeps a nested layout that really does end in rb" do
+    with_project.call(name: "thing-rb", layout: :nested) do |dir|
+      project = GemKit::Release::Project.detect(dir)
+      project.require_path.should == "thing/rb"
+      project.version_file.should == File.join(dir, "lib/thing/rb/version.rb")
+    end
+  end
+
+  # "release" is not a binding suffix, so a name ending in something else is
+  # untouched by any of this.
+  it "leaves a hyphenated name that wears no binding suffix alone" do
+    with_project.call(name: "gem_kit-release", layout: :nested) do |dir|
+      project = GemKit::Release::Project.detect(dir)
+      project.require_path.should == "gem_kit/release"
     end
   end
 

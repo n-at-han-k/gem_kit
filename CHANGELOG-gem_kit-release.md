@@ -9,6 +9,24 @@ files.
 
 ## [Unreleased]
 
+### Fixed
+
+- A bindings gem's layout is recognised: `oo7-rb` ships `lib/oo7.rb` with
+  `lib/oo7/version.rb` beside it, dropping the suffix that says which language
+  binds it. Only the nested (`lib/oo7/rb`) and flat (`lib/oo7_rb`) readings were
+  tried, so `gem kit bump` wrote to a path nothing had and every command failed
+  with `no .gemspec`-adjacent confusion -- the version was unfindable and
+  deprecations went undetected. `-rb` and `-ruby` are the suffixes, dropped only
+  when the tree actually holds the shorter layout, so a gem that genuinely nests
+  under a segment called `rb` keeps it.
+- With the path right, an ERB template beside the version file is found again for
+  these gems: `version_template` derives from `version_file`, so a wrong
+  directory took the template with it.
+- The project spec's throwaway gems emit nested `module` blocks rather than
+  `module A::B`, which is only valid once `A` exists. Every hyphenated fixture
+  but `gem_kit-release` was relying on the constant happening to be defined in
+  the test process.
+
 ## [0.3.2] - 2026-08-30
 
 ### Fixed
