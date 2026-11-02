@@ -9,6 +9,8 @@ files.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-02
+
 ### Fixed
 
 - A bindings gem's layout is recognised: `oo7-rb` ships `lib/oo7.rb` with
