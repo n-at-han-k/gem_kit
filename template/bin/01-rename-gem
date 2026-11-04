@@ -5,14 +5,36 @@ require "fileutils"
 
 current_name = "gem_kit"
 
+# A suffix that says which language binds the library, not part of the library
+# itself. "clippy.rb" is the gem; "clippy" is lib/clippy.rb and `module Clippy`.
+BINDING_SUFFIXES = %w[rb ruby].freeze
+
 def to_camel(snake)
   snake.split("_").map(&:capitalize).join
+end
+
+# The identifier the library is built from: paths under lib/ and exe/, the
+# module name, the test file. This is NOT always the gem name.
+#
+# RubyGems allows a dot in a name, and a gem called "clippy.rb" or "vue.rb"
+# wears ".rb" the way "oo7-rb" wears "-rb" — as a note about which language
+# this is, usually because RubyGems would not give up the bare name. The
+# library underneath drops it. Keeping it would name a directory "lib/clippy.rb/"
+# and a module "Clippy.rb", neither of which is valid Ruby.
+def to_base(name)
+  name.split(".").then do |segments|
+    if segments.length == 2 && BINDING_SUFFIXES.include?(segments.last)
+      segments.first
+    else
+      name
+    end
+  end.tr("-.", "__")
 end
 
 # Parse --from flag
 args = ARGV.dup
 if (idx = args.index("--from"))
-  current_name = args.delete_at(idx + 1)&.tr("-", "_")
+  current_name = args.delete_at(idx + 1)
   args.delete_at(idx)
   abort "ERROR: --from requires a gem name" unless current_name && !current_name.empty?
 end
@@ -20,16 +42,20 @@ end
 name = args[0]
 
 if name.nil? || name.empty?
-  print "Gem name (snake_case): "
+  print "Gem name (snake_case, or dotted like clippy.rb): "
   name = $stdin.gets.chomp
 end
 
 abort "Usage: bin/rename-gem <gem_name> [--from <current_name>]" if name.empty?
 
-old_snake = current_name
+# The gem name as typed, dot and all — this is what goes in `spec.name` and
+# names the .gemspec file.
+gem_name = name
+
+old_snake = to_base(current_name)
 old_camel = to_camel(old_snake)
 
-snake = name.tr("-", "_")
+snake = to_base(gem_name)
 camel = to_camel(snake)
 
 if snake == old_snake
@@ -40,13 +66,17 @@ root = File.expand_path("..", __dir__)
 
 # --- Rename files and directories ---
 
+# The .gemspec is named for the GEM ("clippy.rb.gemspec"); everything under
+# lib/ and exe/ is named for the library base ("lib/clippy.rb", "exe/clippy").
 renames = {
   "lib/#{old_snake}"                    => "lib/#{snake}",
   "lib/#{old_snake}.rb"                 => "lib/#{snake}.rb",
   "lib/#{snake}/version.rb"             => "lib/#{snake}/version.rb",
   "lib/#{snake}/version.rb.erb"         => "lib/#{snake}/version.rb.erb",
-  "#{old_snake}.gemspec"                => "#{snake}.gemspec",
-  "#{old_snake}.gemspec.erb"            => "#{snake}.gemspec.erb",
+  "#{current_name}.gemspec"             => "#{gem_name}.gemspec",
+  "#{current_name}.gemspec.erb"         => "#{gem_name}.gemspec.erb",
+  "#{old_snake}.gemspec"                => "#{gem_name}.gemspec",
+  "#{old_snake}.gemspec.erb"            => "#{gem_name}.gemspec.erb",
   "exe/#{old_snake}"                    => "exe/#{snake}",
   "test/#{old_snake}_test.rb"           => "test/#{snake}_test.rb",
 }
@@ -92,16 +122,40 @@ files.each do |path|
   end
 end
 
-# Update current_name in this script to reflect the new name
-script_path = File.join(root, "bin", "rename-gem")
-if File.exist?(script_path)
-  script = File.read(script_path)
-  script.sub!(/^current_name = ".*"$/, "current_name = \"#{snake}\"")
-  File.write(script_path, script)
-  puts "  updated bin/rename-gem (current_name = \"#{snake}\")"
+# The blanket substitution above rewrote every occurrence of the old name to
+# the library base, which is right everywhere except `spec.name` — the gem is
+# "clippy.rb", not "clippy". Put the dot back where it belongs.
+if gem_name != snake
+  ["#{gem_name}.gemspec", "#{gem_name}.gemspec.erb"].each do |rel|
+    path = File.join(root, rel)
+    next unless File.exist?(path)
+
+    contents = File.read(path)
+    updated = contents.sub(/^(\s*spec\.name\s*=\s*)(["']).*?\2/) { "#{$1}#{$2}#{gem_name}#{$2}" }
+    next if updated == contents
+
+    File.write(path, updated)
+    puts "  updated #{rel} (spec.name = \"#{gem_name}\")"
+  end
 end
 
-puts "\nRenamed #{old_snake} -> #{snake} (#{old_camel} -> #{camel})"
+# Record the new name so a second run knows what it is renaming FROM. The file
+# is bin/01-rename-gem; the old path here was bin/rename-gem, which has not
+# existed for a while, so this silently never fired and re-running needed
+# --from every time.
+script_path = File.join(root, "bin", "01-rename-gem")
+if File.exist?(script_path)
+  script = File.read(script_path)
+  script.sub!(/^current_name = ".*"$/, "current_name = \"#{gem_name}\"")
+  File.write(script_path, script)
+  puts "  updated bin/01-rename-gem (current_name = \"#{gem_name}\")"
+end
+
+puts "\nRenamed #{current_name} -> #{gem_name} (#{old_camel} -> #{camel})"
+if gem_name != snake
+  puts "  gem name:  #{gem_name}"
+  puts "  library:   lib/#{snake}.rb, lib/#{snake}/version.rb, module #{camel}"
+end
 
 puts "Removing git remote origin... add your own."
 `git remote remove origin`

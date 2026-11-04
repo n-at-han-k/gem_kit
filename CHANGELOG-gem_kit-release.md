@@ -9,6 +9,21 @@ files.
 
 ## [Unreleased]
 
+### Fixed
+
+- A dotted bindings name is recognised: a gem called `clippy.rb` (or `vue.rb`,
+  `d3.rb`) ships `lib/clippy.rb` with `lib/clippy/version.rb` beside it and
+  `module Clippy` inside, dropping the `.rb` the same way `oo7-rb` drops its
+  `-rb`. RubyGems allows a dot in a name, but every layout was derived by
+  splitting on `-`, so `clippy.rb` stayed one segment with the dot still in it
+  and the inferred path was `lib/clippy.rb/version.rb` — a directory whose name
+  ends in `.rb`, which nothing has. `gem kit bump` could not find the version
+  and deprecations went undetected. `.rb` and `.ruby` are the suffixes.
+  Unlike the hyphenated layouts this one is also the fallback for an empty
+  tree, because `bundle gem` will not take a dotted name and so leaves no
+  nested convention to fall back to. A dot that is not a language suffix
+  (`foo.bar`) is left alone.
+
 ## [0.3.3] - 2026-11-02
 
 ### Fixed

@@ -165,14 +165,24 @@ module GemKit
       # lib/oo7/rb.rb and the flat one lib/oo7_rb.rb, neither of which was ever
       # there, so without this a binding gem cannot be bumped at all.
       #
-      # All three are conventional and the name alone cannot tell them apart, so
+      # A fourth wears that suffix after a DOT rather than a hyphen: `clippy.rb`,
+      # `vue.rb`, `d3.rb`. RubyGems allows a dot in a name, and the convention
+      # is the same as the hyphenated binding above — the library drops the
+      # suffix, so lib/clippy.rb holds `module Clippy` and the version sits at
+      # lib/clippy/version.rb. None of the hyphen layouts sees this: splitting
+      # "clippy.rb" on "-" yields one segment that still has the dot in it, so
+      # the inferred path was lib/clippy.rb/version.rb — a directory whose name
+      # ends in .rb, which nothing has.
+      #
+      # All four are conventional and the name alone cannot tell them apart, so
       # ask the tree: whichever exists is what this project is.
       #
       # When none exists the nested form wins, because that is what
       # `bundle gem` would have produced and a project with no library yet is
-      # about to become one.
+      # about to become one — except for a dotted name, which `bundle gem`
+      # cannot produce at all, and whose only convention is the dotted one.
       def library_segments
-        layouts.find { |segments| exists_under_lib?(segments) } || nested_layout
+        layouts.find { |segments| exists_under_lib?(segments) } || default_layout
       end
 
       # Load the library, so Deprecate's registry reflects this project.
@@ -195,15 +205,34 @@ module GemKit
         # The suffixes a binding gem wears, which its library drops.
         BINDING_SUFFIXES = %w[rb ruby].freeze
 
-        # What a hyphenated name could mean, most conventional first. A name with
-        # no hyphen in it has exactly one meaning and the list says so.
+        # What a name could mean, most conventional first. A name with neither
+        # a hyphen nor a dotted suffix in it has exactly one meaning and the
+        # list says so.
         def layouts
-          [nested_layout, flat_layout, *binding_layout].uniq
+          [*dotted_layout, nested_layout, flat_layout, *binding_layout].uniq
         end
+
+        # Nesting is `bundle gem`'s doing and so the usual default, but
+        # `bundle gem` will not take a dotted name, so there is nothing for a
+        # dotted one to fall back to but itself.
+        def default_layout = dotted_layout.first || nested_layout
 
         def nested_layout = name.split("-")
 
         def flat_layout = [name.tr("-", "_")]
+
+        # [["clippy"]] for "clippy.rb"; nothing for a name with no dot, and
+        # nothing for a dot that is not a language suffix, so a hypothetical
+        # "foo.bar" is left to the layouts above.
+        def dotted_layout
+          name.split(".").then do |segments|
+            if segments.length == 2 && BINDING_SUFFIXES.include?(segments.last)
+              [[segments.first]]
+            else
+              []
+            end
+          end
+        end
 
         # [["oo7"]] for "oo7-rb"; nothing for a name wearing no binding suffix,
         # and nothing for one that is only the suffix.
@@ -241,6 +270,7 @@ describe "gem_kit/release/project" do
       case layout
       when :flat then path = [name.tr("-", "_")]
       when :binding then path = name.split("-")[0..-2]
+      when :dotted then path = [name.split(".").first]
       else path = name.split("-")
       end
       FileUtils.mkdir_p(File.join(dir, "lib", *path))
@@ -334,6 +364,83 @@ describe "gem_kit/release/project" do
       project = GemKit::Release::Project.detect(dir)
       project.require_path.should == "thing/rb"
       project.version_file.should == File.join(dir, "lib/thing/rb/version.rb")
+    end
+  end
+
+  # A dotted suffix is the same idea as the hyphenated binding above, and the
+  # one RubyGems name shape that none of the hyphen layouts can see: splitting
+  # "clippy.rb" on "-" leaves the dot in the segment, so the inferred path was
+  # lib/clippy.rb/version.rb -- a directory ending in .rb, which nothing has.
+  it "reads a dotted bindings layout, whose library drops the suffix" do
+    with_project.call(name: "clippy.rb", layout: :dotted) do |dir|
+      project = GemKit::Release::Project.detect(dir)
+      project.name.should == "clippy.rb"
+      project.require_path.should == "clippy"
+      project.version_file.should == File.join(dir, "lib/clippy/version.rb")
+    end
+  end
+
+  it "reads a dotted .ruby suffix the same way" do
+    with_project.call(name: "sqlite3.ruby", layout: :dotted) do |dir|
+      GemKit::Release::Project.detect(dir).version_file
+        .should == File.join(dir, "lib/sqlite3/version.rb")
+    end
+  end
+
+  # `bundle gem` will not take a dotted name, so unlike the hyphen cases there
+  # is no nested convention for an empty tree to fall back to.
+  it "falls back to the dotted layout when nothing is on disk yet" do
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "clippy.rb.gemspec"), <<~RUBY)
+        Gem::Specification.new do |spec|
+          spec.name = "clippy.rb"
+          spec.version = "0.1.0"
+          spec.authors = ["x"]
+          spec.summary = "x"
+          spec.files = []
+        end
+      RUBY
+      project = GemKit::Release::Project.detect(dir)
+      project.require_path.should == "clippy"
+      project.version_file.should == File.join(dir, "lib/clippy/version.rb")
+    end
+  end
+
+  # The entry file alone is enough: a dotted gem's lib/clippy.rb is exactly
+  # what the nested layout would mistake for its own directory.
+  it "recognises the dotted layout from the entry file alone" do
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib"))
+      File.write(File.join(dir, "lib", "clippy.rb"), "module Clippy
+end
+")
+      File.write(File.join(dir, "clippy.rb.gemspec"), <<~RUBY)
+        Gem::Specification.new do |spec|
+          spec.name = "clippy.rb"
+          spec.version = "0.1.0"
+          spec.authors = ["x"]
+          spec.summary = "x"
+          spec.files = []
+        end
+      RUBY
+      GemKit::Release::Project.detect(dir).require_path.should == "clippy"
+    end
+  end
+
+  # Only a language suffix is dropped. A dot that means something else is left
+  # to the hyphen layouts, so this must not become lib/foo.
+  it "leaves a dot that is not a language suffix alone" do
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "foo.bar.gemspec"), <<~RUBY)
+        Gem::Specification.new do |spec|
+          spec.name = "foo.bar"
+          spec.version = "0.1.0"
+          spec.authors = ["x"]
+          spec.summary = "x"
+          spec.files = []
+        end
+      RUBY
+      GemKit::Release::Project.detect(dir).require_path.should == "foo.bar"
     end
   end
 
