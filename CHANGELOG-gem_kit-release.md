@@ -9,6 +9,8 @@ files.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-04
+
 ### Fixed
 
 - A dotted bindings name is recognised: a gem called `clippy.rb` (or `vue.rb`,
